@@ -150,8 +150,10 @@ elsif active_cluster && remote_config.length != 0
     nodePort.each do |guest|
       host = (MIN_SERVICE_GUEST_PORT + guest - MIN_SERVICE_NODEPORT).to_s
       ports[host] = guest
+      puts "\e[1m==> #{name}:\e[22m #{host} (host) => #{guest} (guest) \e[30;1mExecute: curl http://localhost:#{host}\e[0m"
     end
   end
+  puts
 end
 
 worker_base_ip = MASTER_IP.split('.')[0..2].join('.')
@@ -194,7 +196,7 @@ Vagrant.configure("2") do |config|
       w.vm.provider "virtualbox" do |vb|
         name = "kubernetes-#{worker_name}"
       end
-      w.vm.hostname = "worker"
+      w.vm.hostname = worker_name
       w.vm.network "private_network", 
         ip: worker_ip,
         netmask: "255.255.255.0",
