@@ -7,6 +7,7 @@ Some of the specifications are:
 - It is just one Vagrantfile
 - Creates a 1xN cluster (1 Master, multiple Workers)
 - Uses Ubuntu for the nodes OS
+- Installs Kubernetes 1.11 and Docker 17.12.1-ce
 - The Kubernetes configuration is done with Kubeadm
 - Uses Canal for Pod Networking
 
@@ -31,7 +32,8 @@ The difference between other Kubernetes on Vagrant projects is that it's just on
 To get a 1x3 cluster with nginx:
 
 ```bash
-WORKERS=3 vagrant up
+export WORKERS=3
+vagrant up
 export KUBECONFIG=${PWD}/shared_folder/remote_config
 kubectl get nodes -w
 watch -n 0.5 kubectl get pods --all-namespaces
@@ -41,7 +43,9 @@ kubectl expose deployment nginx --type=NodePort
 
 # Option 1:
 vagrant reload
-curl http://localhost:3674 # read below to know why port 3674
+vagrant status
+port=$(vagrant status | grep nginx: | cut -f3 -d' ')
+curl http://localhost:${port}
 
 # Option 2:
 port=$(kubectl get svc nginx -o jsonpath='{.spec.ports[0].nodePort}')
@@ -57,18 +61,9 @@ rm -rf .vagrant/
 vagrant box remove ubuntu/bionic64 --all
 ```
 
-The **option #1**, will forward **all** the identified ports of services of type nodePort. Check the port  forwarded to the service port in the vagrant output. In this example is `3674`:
+The **option #1**, will forward **all** the identified ports of services of type nodePort. Use this option to not worry about having a service not accessible from outside the cluster.
 
-```bash
-$ vagrant reload
-Identified Service 'nginx' of type nodePort using ports: 30674
-...
-==> worker-01: Forwarding ports...
-    worker-01: 30674 (guest) => 3674 (host) (adapter 1)
-    worker-01: 22 (guest) => 2200 (host) (adapter 1)
-```
-
-The **option #2**, will forward only the ports specified in the variable `PORTS` but also using specified the host port. Use this option to get always the same port.
+The **option #2**, will forward only the ports specified in the variable `PORTS` but also using specified the host port. Use this option to get always the same port number.
 
 ## Create a Cluster
 
@@ -81,7 +76,8 @@ vagrant up
 To get a 1xN cluster use the variable `WORKERS`. For example, to get a 1x3 cluster execute:
 
 ```bash
-WORKERS=3 vagrant up
+export WORKERS=3
+vagrant up
 ```
 
 Export the KUBECONFIG variable and verify the cluster is running, executing:
