@@ -205,9 +205,11 @@ Vagrant.configure("2") do |config|
         libvirt__forward_mode: "none",
         libvirt__network_name: "kubernetes",
         libvirt__netmask: "255.255.255.0"
-      ports.each { |host, guest|
-        w.vm.network :forwarded_port, host: host, guest: guest
-      }
+      if i == 1
+        ports.each { |host, guest|
+          w.vm.network :forwarded_port, host: host, guest: guest
+        }
+      end
       w.vm.provision "shell", inline: "#{NODEIP} node_ip #{worker_ip}"
       w.vm.provision "shell", inline: PROVISION_WORKER
     end

@@ -42,14 +42,14 @@ kubectl run nginx --replicas=2 --image nginx --port=80
 kubectl expose deployment nginx --type=NodePort
 
 # Option 1:
-vagrant reload
+vagrant reload worker-01
 vagrant status
 port=$(vagrant status | grep nginx: | cut -f3 -d' ')
 curl http://localhost:${port}
 
 # Option 2:
 port=$(kubectl get svc nginx -o jsonpath='{.spec.ports[0].nodePort}')
-PORTS="8080>${port}" vagrant reload
+PORTS="8080>${port}" vagrant reload worker-01
 curl http://localhost:8080
 
 vagrant destroy
@@ -97,10 +97,10 @@ If `watch` is not installed, use the flag `-w` of `kubectl`.
 
 Vagrant or Virtualbox is not supported yet by LoadBalancer services type. So, all the services has to be of type [**NodePort**](https://kubernetes.io/docs/concepts/services-networking/service/#nodeport) if you want to access them from the host machine, your computer.
 
-After adding all the services, reload the Vagrant configuration to add the forward port rules to the service ports.
+After adding all the services, reload the Vagrant configuration to add the forward port rules to the service ports. There is no need to reload all the machines, just the `worker-01`:
 
 ```bash
-vagrant reload
+vagrant reload worker-01
 ```
 
 This will identify all the services of type **NodePort**, get the exposed port and forward a host port to the service port. The host ports will be `3000 + (guest_port - 30000)`. For example, if service nginx expose port `30001`, the host port is `3001`. So, the service is accessible with `http://localhost:3001`
@@ -111,7 +111,7 @@ To define your own host port, use the environment variable **`PORTS`**, for exam
 service_name=nginx
 
 port=$(kubectl get svc ${service_name} -o jsonpath='{.spec.ports[0].nodePort}')
-PORTS="8080>${port}" vagrant reload
+PORTS="8080>${port}" vagrant reload worker-01
 curl http://localhost:8080
 ```
 
@@ -128,6 +128,8 @@ If the host_port is not specified, will use `3000 + (guest_port - 30000)` for ex
   - forward​  `localhost:3123` to `worker:30123`
 
 If you add more services, or execute the reload again, make sure to include the previous ports definition, otherwise will be deleted. Or, don't use the `PORTS` variable and let Vagrant get the host ports.
+
+If you get an error about ports collition that does not allow you to forward the ports, then reload again using the `PORTS` variables and a different host port.
 
 ## Destroy the Cluster
 
