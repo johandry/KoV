@@ -28,13 +28,57 @@ The difference between other Kubernetes on Vagrant projects is that it's just on
 
 ## Quick Start
 
+To get a 1x3 cluster with nginx:
+
+```bash
+WORKERS=3 vagrant up
+export KUBECONFIG=${PWD}/shared_folder/remote_config
+kubectl get nodes -w
+watch -n 0.5 kubectl get pods --all-namespaces
+
+kubectl run nginx --replicas=2 --image nginx --port=80
+kubectl expose deployment nginx --type=NodePort
+
+# Option 1:
+vagrant reload
+curl http://localhost:3674 # read below to know why port 3674
+
+# Option 2:
+port=$(kubectl get svc nginx -o jsonpath='{.spec.ports[0].nodePort}')
+PORTS="8080>${port}" vagrant reload
+curl http://localhost:8080
+
+vagrant destroy
+
+rm shared_folder/*
+rm *.log
+rm -rf .vagrant/
+
+vagrant box remove ubuntu/bionic64 --all
+```
+
+The **option #1**, will forward **all** the identified ports of services of type nodePort. Check the port  forwarded to the service port in the vagrant output. In this example is `3674`:
+
+```bash
+$ vagrant reload
+Identified Service 'nginx' of type nodePort using ports: 30674
+...
+==> worker-01: Forwarding ports...
+    worker-01: 30674 (guest) => 3674 (host) (adapter 1)
+    worker-01: 22 (guest) => 2200 (host) (adapter 1)
+```
+
+The **option #2**, will forward only the ports specified in the variable `PORTS` but also using specified the host port. Use this option to get always the same port.
+
+## Create a Cluster
+
 To get a 1x1 cluster, just execute:
 
 ```bash
 vagrant up
 ```
 
-To get a 1xN cluster, i.e. N=3, execute:
+To get a 1xN cluster use the variable `WORKERS`. For example, to get a 1x3 cluster execute:
 
 ```bash
 WORKERS=3 vagrant up
@@ -52,33 +96,6 @@ watch -n 0.5 kubectl get pods --all-namespaces
 ```
 
 If `watch` is not installed, use the flag `-w` of `kubectl`.
-
-After a service is imported, it's required to reload the Vagrant configuration, you may use the variable `PORTS`:
-
-```bash
-vagrant reload
-```
-
-Or:
-
-```bash
-PORTS="8080>30001" vagrant reload
-```
-
-To destroy the cluster, execute:
-
-```bash
-vagrant destroy
-```
-
-To cleanup everything:
-
-```bash
-rm shared_folder/*
-rm *.log
-rm -rf .vagrant/
-vagrant box remove ubuntu/bionic64 --all
-```
 
 ## Services
 
@@ -115,6 +132,23 @@ If the host_port is not specified, will use `3000 + (guest_port - 30000)` for ex
   - forward​  `localhost:3123` to `worker:30123`
 
 If you add more services, or execute the reload again, make sure to include the previous ports definition, otherwise will be deleted. Or, don't use the `PORTS` variable and let Vagrant get the host ports.
+
+## Destroy the Cluster
+
+To destroy the cluster, execute:
+
+```bash
+vagrant destroy
+```
+
+To cleanup everything:
+
+```bash
+rm shared_folder/*
+rm *.log
+rm -rf .vagrant/
+vagrant box remove ubuntu/bionic64 --all
+```
 
 ## TODO
 
