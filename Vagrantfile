@@ -1,5 +1,6 @@
-MASTER_IP = "10.0.0.10"
-WORKER_IP = "10.0.0.101"
+require 'json'
+
+MASTER_IP = "10.0.0.100"
 
 MIN_SERVICE_NODEPORT   = 30000
 MIN_SERVICE_GUEST_PORT = 3000
@@ -103,23 +104,58 @@ PROVISION_WORKER = <<-SHELL
   #{PROVISION_KUBECONFIG}
 SHELL
 
-env_ports=ENV["PORTS"]
-env_ports="" if env_ports == nil
+num_workers = 1
+num_workers = ENV["WORKERS"].to_i if ENV["WORKERS"] != nil
+
+def active_cluster
+  machine_id = Dir["./.vagrant/machines/*/virtualbox/id"]
+  return false if machine_id.length == 0
+
+  machine_id.each do |id|
+    hostname = id.split('/')[3]
+    next if hostname.include? "master"
+    content = File.open(id, "r"){ |file| file.read }
+    return true if content.length > 1
+  end
+  return false
+end
+
+remote_config = Dir["./shared_folder/remote_config"]
 
 ports = Hash.new
-env_ports.split(':').each do |pair| 
-  p=pair.split('>')
+if ENV["PORTS"] != nil
+  ENV["PORTS"].split(':').each do |pair| 
+    p=pair.split('>')
 
-  if p.length == 1
-    guest = p[0]
-    host = (MIN_SERVICE_GUEST_PORT + guest.to_i - MIN_SERVICE_NODEPORT).to_s
-  else
-    host = p[0]
-    guest = p[1]
+    if p.length == 1
+      guest = p[0]
+      host = (MIN_SERVICE_GUEST_PORT + guest.to_i - MIN_SERVICE_NODEPORT).to_s
+    else
+      host = p[0]
+      guest = p[1]
+    end
+
+    ports[host] = guest
   end
-
-  ports[host] = guest
+elsif active_cluster && remote_config.length != 0
+  services = JSON.parse(`kubectl --kubeconfig ./shared_folder/remote_config get services -o json 2>/dev/null`)
+  services["items"].each do |s| 
+    next if s["spec"]["type"] != "NodePort"
+    name = s["spec"]["selector"]["run"]
+    nodePort = []
+    s["spec"]["ports"].each do |p|
+      nodePort << p["nodePort"]
+    end
+    puts "Identified Service '#{name}' of type nodePort using ports: #{nodePort.join ','}"
+    nodePort.each do |guest|
+      host = (MIN_SERVICE_GUEST_PORT + guest - MIN_SERVICE_NODEPORT).to_s
+      ports[host] = guest
+    end
+  end
 end
+
+worker_base_ip = MASTER_IP.split('.')[0..2].join('.')
+worker_init_octet = MASTER_IP.split('.')[3].to_i
 
 Vagrant.configure("2") do |config|
   config.vm.box = "ubuntu/bionic64"
@@ -151,23 +187,27 @@ Vagrant.configure("2") do |config|
     m.vm.provision "shell", inline: PROVISION_MASTER
   end
 
-  config.vm.define "worker" do |w|
-    w.vm.provider "virtualbox" do |vb|
-      name = "kubernetes-worker"
+  (1..num_workers).each do |i|
+    worker_ip = "#{worker_base_ip}.#{worker_init_octet + i}"
+    worker_name = "worker-%02d" % [i]
+    config.vm.define worker_name do |w|
+      w.vm.provider "virtualbox" do |vb|
+        name = "kubernetes-#{worker_name}"
+      end
+      w.vm.hostname = "worker"
+      w.vm.network "private_network", 
+        ip: worker_ip,
+        netmask: "255.255.255.0",
+        auto_config: true,
+        virtualbox__intnet: "kubenet",
+        libvirt__forward_mode: "none",
+        libvirt__network_name: "kubernetes",
+        libvirt__netmask: "255.255.255.0"
+      ports.each { |host, guest|
+        w.vm.network :forwarded_port, host: host, guest: guest
+      }
+      w.vm.provision "shell", inline: "#{NODEIP} node_ip #{worker_ip}"
+      w.vm.provision "shell", inline: PROVISION_WORKER
     end
-    w.vm.hostname = "worker"
-    w.vm.network "private_network", 
-      ip: WORKER_IP,
-      netmask: "255.255.255.0",
-      auto_config: true,
-      virtualbox__intnet: "kubenet",
-      libvirt__forward_mode: "none",
-      libvirt__network_name: "kubernetes",
-      libvirt__netmask: "255.255.255.0"
-    ports.each { |host, guest|
-      w.vm.network :forwarded_port, host: host, guest: guest
-    }
-    w.vm.provision "shell", inline: "#{NODEIP} node_ip #{WORKER_IP}"
-    w.vm.provision "shell", inline: PROVISION_WORKER
   end
 end
