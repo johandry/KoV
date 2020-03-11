@@ -1,6 +1,7 @@
 require 'json'
 
 MASTER_IP = "10.0.0.100"
+MASTER_PORT = "5443"
 
 MIN_SERVICE_NODEPORT   = 30000
 MIN_SERVICE_GUEST_PORT = 3000
@@ -98,8 +99,8 @@ PROVISION_WORKER = <<-SHELL
   token=$(cat /home/vagrant/shared_folder/token)
   token_ca_cert=$(cat /home/vagrant/shared_folder/token_ca_cert.hash)
 
-  h1 "Adding Worker to Master running on https://#{MASTER_IP}:6443"
-  kubeadm join --token $token --discovery-token-ca-cert-hash sha256:$token_ca_cert #{MASTER_IP}:6443
+  h1 "Adding Worker to Master running on https://#{MASTER_IP}:#{MASTER_PORT}"
+  kubeadm join --token $token --discovery-token-ca-cert-hash sha256:$token_ca_cert #{MASTER_IP}:#{MASTER_PORT}
 
   #{PROVISION_KUBECONFIG}
 SHELL
@@ -184,7 +185,7 @@ Vagrant.configure("2") do |config|
       virtualbox__intnet: "kubenet",
       libvirt__network_name: "kubernetes",
       libvirt__netmask: "255.255.255.0"
-    m.vm.network "forwarded_port", guest: 6443, host: 6443
+    m.vm.network "forwarded_port", guest: MASTER_PORT, host: MASTER_PORT
     m.vm.provision "shell", inline: "#{NODEIP} node_ip #{MASTER_IP}"
     m.vm.provision "shell", inline: PROVISION_MASTER
   end
